@@ -4,7 +4,6 @@
 #  - 3 types of homes for exact matching (eg. EPC rating)
 #  - 10% risk of moving house each year
 #  - controls are sampled without replacement, but re-released each year to the next batch of retrofits
-# The code simulates healthcare episodes using a negative binomial distribution with different assumed effect sizes, then estimates the proportion of simulations where a significant effect is found
 
 # ---------
 # libraries
@@ -12,6 +11,7 @@
 
 library(data.table)
 library(MASS)
+library(PASSED)
 
 # ------
 # inputs
@@ -102,7 +102,7 @@ sim <- function (n_homes = 11000,
   m <- mapply(f, i = inputs$years, j = inputs$types, SIMPLIFY = F)
   m <- rbindlist(m)
   m$py <- m$vuln_n * m$years
-  
+
   # model outcomes
   if (printdim) print (dim(m))
   m$target <- ifelse(m$retrofit, outcome_rate * effect_irr, outcome_rate) * m$py
@@ -142,8 +142,9 @@ inputs <- expand.grid(scenario = NA,
 inputs$outcome_disp <- ifelse(inputs$vuln_prev == 1, 0.5, 5)
 inputs$scenario = LETTERS[1:nrow(inputs)]
 
-results <- power(B = 100, inputs = inputs, effects = seq(0.7, 1, 0.025))
-# results <- readRDS("power3_results.RDS")
+# this takes a long time to run, so results are pre-calculated and loaded
+# results <- power(B = 100, inputs = inputs, effects = seq(0.7, 1, 0.025))
+results <- readRDS(url("https://github.com/danlewer/healthy-homes/raw/main/power3_results.RDS"))
 
 pf <- function (scenarios, cols, d) {
   plot(1, type = 'n', xlim = c(0.7, 1), ylim = c(0, 1), axes = F, xlab = 'Effect size (IRR)', ylab = 'Power')
@@ -192,4 +193,23 @@ inputsHH <- data.frame(
 
 resultsHH <- power(B = 50, inputsHH, effects = seq(0.8, 1, 0.025))
 
-pf(resultsHH$scenario, cols = brewer.pal(6, 'Set2'), d = resultsHH)
+pf(inputsHH$scenario, cols = brewer.pal(6, 'Set2'), d = resultsHH)
+
+# ------------------------------------------------
+# compare to results from simple power calculation
+# ------------------------------------------------
+
+# average follow-up per household of 5.4 years (accounting for 2.18 residents per HH)
+
+simplePower <- function (baseline = 0.769, disp = 0.5, s = 8464, effects = seq(0.7, 1, 0.001), power = 0.9) {
+  p <- sapply(effects, function (x) power_NegativeBinomial(n1 = s, equal.sample = T, duration = 5.4, mu1 = baseline, mu2 = baseline * x, theta = disp)$power)
+  effects[which.min(abs(p - power))]
+}
+
+inputsPASSED <- data.frame(
+  s = c(8464, 8464, 8464, 1016, 931, 1523),
+  baseline = c(0.769, 0.455, 1.023, 3.204, 2.068, 2.842),
+  disp = c(0.5, 0.5, 0.5, 5, 5, 5) * 5.4
+)
+
+mapply(simplePower, s = inputsPASSED$s, baseline = inputsPASSED$baseline, disp = inputsPASSED$disp)

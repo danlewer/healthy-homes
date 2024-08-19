@@ -10,8 +10,8 @@
 # ---------
 
 library(data.table)
-library(MASS)
-library(PASSED)
+library(MASS) # for glm.nb
+library(PASSED) # for simple power calculation assuming uniform follow-up (for comparison)
 
 # ------
 # inputs
